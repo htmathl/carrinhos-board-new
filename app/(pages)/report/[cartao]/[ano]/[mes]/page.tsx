@@ -2,13 +2,15 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Database } from "@/lib/database.types"
+import { CompactTable } from '@table-library/react-table-library/compact'
+import { useTheme } from '@table-library/react-table-library/theme'
+import { getTheme } from '@table-library/react-table-library/baseline'
 
 import latamLogo from '@/app/assets/latam_logo.svg'
 import AzulLogo from '@/app/assets/azul_logo.svg'
@@ -17,7 +19,7 @@ import Image from 'next/image'
 type DadosLatam = Database['public']['Tables']['dados_latam']['Row']
 type DadosAzul = Database['public']['Tables']['dados_azul']['Row']
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"]
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#82ca9d", "#ffc658", "#ff7c7c", "#8dd1e1", "#a4de6c", "#d0ed57"]
 
 const mapMesNumero = (mesNome: string): number => {
   const meses: Record<string, number> = {
@@ -37,7 +39,7 @@ export default function ReportPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [tableData, setTableData] = useState<Array<{despesa: string, categoria: string, valor: string}>>([])
+  const [tableData, setTableData] = useState<Array<{id: string, despesa: string, categoria: string, valor: string, valorNumerico: number}>>([])
   const [pieData, setPieData] = useState<Array<{categoria: string, valor: number}>>([])
   const [lineData, setLineData] = useState<Array<{mes: string, valor: number}>>([])
   const [loading, setLoading] = useState(true)
@@ -73,15 +75,20 @@ export default function ReportPage() {
         console.error('Erro ao buscar dados do ano:', errorAno)
       }
 
-      // Processar dados da tabela
-      const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map(item => ({
+      // Processar dados da tabela e ordenar por valor decrescente
+      const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map((item, index) => ({
+        id: `${index}`,
         despesa: item.despesa,
         categoria: item.categoria || 'Outros',
+        valorNumerico: item.valor || 0,
         valor: new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL'
         }).format(item.valor || 0)
       })) || []
+      
+      // Ordenar por valor decrescente
+      dadosTabela.sort((a, b) => b.valorNumerico - a.valorNumerico)
       setTableData(dadosTabela)
 
       // Processar dados para gráfico de pizza (agrupado por categoria)
@@ -95,11 +102,32 @@ export default function ReportPage() {
         return acc
       }, {} as Record<string, number>)
 
-      const dadosPizza = Object.entries(categorias || {}).map(([categoria, valor]) => ({
-        categoria,
-        valor
-      }))
-      setPieData(dadosPizza)
+      // Ordenar por valor decrescente e pegar apenas as 10 maiores
+      const dadosPizzaOrdenados = Object.entries(categorias || {})
+        .map(([categoria, valor]) => ({
+          categoria,
+          valor
+        }))
+        .sort((a, b) => b.valor - a.valor)
+      
+      // Pegar as 10 maiores categorias
+      const top10 = dadosPizzaOrdenados.slice(0, 10)
+      
+      // Se houver mais de 10, agrupar o resto em "Outros"
+      if (dadosPizzaOrdenados.length > 10) {
+        const somaOutros = dadosPizzaOrdenados
+          .slice(10)
+          .reduce((acc, item) => acc + item.valor, 0)
+        
+        if (somaOutros > 0) {
+          top10.push({
+            categoria: 'Outros',
+            valor: somaOutros
+          })
+        }
+      }
+      
+      setPieData(top10)
 
       // Processar dados para gráfico de linha (agrupado por mês)
       const mesesMap: Record<number, string> = {
@@ -133,23 +161,79 @@ export default function ReportPage() {
 
   // Calcular o total
   const totalDespesas = tableData.reduce((acc, item) => {
-    // Remove R$, espaços, pontos (milhares) e troca vírgula por ponto
-    const valorLimpo = item.valor
-      .replace('R$', '')
-      .trim()
-      .replace(/\./g, '')
-      .replace(',', '.')
-    
-    const valor = parseFloat(valorLimpo)
-    
-    // Verifica se é um número válido antes de somar
-    return acc + (isNaN(valor) ? 0 : valor)
+    return acc + item.valorNumerico
   }, 0)
 
   const totalFormatado = new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL'
   }).format(totalDespesas)
+
+  // Configurar tema da tabela
+  const theme = useTheme([
+    getTheme(),
+    {
+      Table: `
+        --data-table-library_grid-template-columns: 40% 30% 30%;
+        background-color: #18181b !important;
+        color: #ffffff !important;
+        font-size: 14px;
+      `,
+      Header: `
+        background-color: #27272a !important;
+        color: #d4d4d8 !important;
+        font-weight: 600;
+        font-size: 14px;
+      `,
+      Body: `
+        background-color: #18181b !important;
+      `,
+      BaseRow: `
+        background-color: #18181b !important;
+        border-bottom: 1px solid #3f3f46;
+        &:hover {
+          background-color: #27272a !important;
+        }
+      `,
+      HeaderRow: `
+        background-color: #27272a !important;
+        border-bottom: 2px solid #52525b;
+      `,
+      Row: `
+        background-color: #18181b !important;
+        color: #ffffff !important;
+      `,
+      BaseCell: `
+        padding: 12px 16px;
+        color: #ffffff !important;
+        &:last-of-type {
+          text-align: right;
+        }
+      `,
+      HeaderCell: `
+        color: #d4d4d8 !important;
+      `,
+    },
+  ])
+
+  // Definir colunas
+  const COLUMNS = [
+    { 
+      label: 'Despesa', 
+      renderCell: (item: typeof tableData[0]) => item.despesa,
+      pinLeft: true
+    },
+    { 
+      label: 'Categoria', 
+      renderCell: (item: typeof tableData[0]) => (
+        <span style={{ color: '#a1a1aa' }}>{item.categoria}</span>
+      )
+    },
+    { 
+      label: 'Valor', 
+      renderCell: (item: typeof tableData[0]) => item.valor 
+    },
+  ]
 
   if (loading) {
     return (
@@ -160,8 +244,8 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 sm:p-6 lg:py-8 lg:px-[5vw]">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 lg:mb-6">
+    <div className="h-screen bg-black text-white p-4 sm:p-6 lg:py-8 lg:px-[5vw] overflow-hidden flex flex-col">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 shrink-0">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold flex items-center gap-2">
           <Image 
             src={cartao === "latam" ? latamLogo : AzulLogo} 
@@ -175,7 +259,7 @@ export default function ReportPage() {
       </header>
 
       {/* Gráficos em linha */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6 shrink-0">
         {/* Gráfico de Linha */}
         <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
@@ -235,7 +319,7 @@ export default function ReportPage() {
               Despesas por Categoria
             </CardTitle>
             <CardDescription className="text-zinc-400 text-sm">
-              Distribuição de gastos
+              Top 10 categorias
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
@@ -270,7 +354,7 @@ export default function ReportPage() {
                       {pieData.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
+                          fill={COLORS[index]}
                         />
                       ))}
                     </Pie>
@@ -293,8 +377,8 @@ export default function ReportPage() {
       </div>
 
       {/* Tabela */}
-      <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden">
-        <CardHeader className="p-4 sm:p-6">
+      <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden flex-1 flex flex-col min-h-0">
+        <CardHeader className="p-4 sm:p-6 shrink-0">
           <CardTitle className="text-white text-lg sm:text-xl">
             Detalhamento de Despesas
           </CardTitle>
@@ -302,49 +386,22 @@ export default function ReportPage() {
             Lista completa de transações
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0 sm:p-6">
-          <div className="max-h-[300px] overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-zinc-800 hover:bg-zinc-800/50">
-                  <TableHead className="text-zinc-300 text-sm sm:text-base whitespace-nowrap">
-                    Despesa
-                  </TableHead>
-                  <TableHead className="text-zinc-300 text-sm sm:text-base whitespace-nowrap">
-                    Categoria
-                  </TableHead>
-                  <TableHead className="text-zinc-300 text-right text-sm sm:text-base whitespace-nowrap">
-                    Valor
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableData.map((item, index) => (
-                  <TableRow
-                    key={index}
-                    className="border-zinc-800 hover:bg-zinc-800/50"
-                  >
-                    <TableCell className="text-white text-sm sm:text-base">
-                      {item.despesa}
-                    </TableCell>
-                    <TableCell className="text-zinc-400 text-sm sm:text-base">
-                      {item.categoria}
-                    </TableCell>
-                    <TableCell className="text-white text-right text-sm sm:text-base whitespace-nowrap">
-                      {item.valor}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="border-t-2 border-zinc-700 bg-zinc-800/70 font-bold">
-                  <TableCell className="text-white text-sm sm:text-base" colSpan={2}>
-                    Total
-                  </TableCell>
-                  <TableCell className="text-white text-right text-sm sm:text-base whitespace-nowrap">
-                    {totalFormatado}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+        <CardContent className="p-0 sm:px-6 flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0" style={{ maxHeight: 'calc(100% - 60px)' }}>
+            <CompactTable 
+              columns={COLUMNS} 
+              data={{ nodes: tableData }} 
+              theme={theme}
+              layout={{ custom: true, horizontalScroll: true, fixedHeader: true }}
+            />
+          </div>
+          
+          {/* Linha de Total - Fixo no footer */}
+          <div className="border-t-2 border-zinc-700 bg-zinc-800/70 p-4 font-bold shrink-0">
+            <div className="grid grid-cols-[40%_30%_30%]">
+              <div className="col-span-2 text-white">Total</div>
+              <div className="text-white text-right">{totalFormatado}</div>
+            </div>
           </div>
         </CardContent>
       </Card>
