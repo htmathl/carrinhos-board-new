@@ -11,6 +11,13 @@ import { Database } from "@/lib/database.types"
 import { CompactTable } from '@table-library/react-table-library/compact'
 import { useTheme } from '@table-library/react-table-library/theme'
 import { getTheme } from '@table-library/react-table-library/baseline'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 import latamLogo from '@/app/assets/latam_logo.svg'
 import AzulLogo from '@/app/assets/azul_logo.svg'
@@ -40,9 +47,12 @@ export default function ReportPage() {
   const supabase = createClient()
 
   const [tableData, setTableData] = useState<Array<{id: string, despesa: string, categoria: string, valor: string, valorNumerico: number}>>([])
+  const [filteredTableData, setFilteredTableData] = useState<Array<{id: string, despesa: string, categoria: string, valor: string, valorNumerico: number}>>([])
   const [pieData, setPieData] = useState<Array<{categoria: string, valor: number}>>([])
   const [lineData, setLineData] = useState<Array<{mes: string, valor: number}>>([])
   const [loading, setLoading] = useState(true)
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string>("todas")
+  const [categorias, setCategorias] = useState<string[]>([])
 
   const lineColor = cartao === "azul" ? "#026CB6" : "#E8114B"
 
@@ -79,7 +89,7 @@ export default function ReportPage() {
       const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map((item, index) => ({
         id: `${index}`,
         despesa: item.despesa,
-        categoria: item.categoria || 'Outros',
+        categoria: item.categoria!,
         valorNumerico: item.valor || 0,
         valor: new Intl.NumberFormat('pt-BR', {
           style: 'currency',
@@ -90,10 +100,15 @@ export default function ReportPage() {
       // Ordenar por valor decrescente
       dadosTabela.sort((a, b) => b.valorNumerico - a.valorNumerico)
       setTableData(dadosTabela)
+      setFilteredTableData(dadosTabela)
+
+      // Extrair categorias únicas
+      const categoriasUnicas = Array.from(new Set(dadosTabela.map(item => item.categoria))).sort()
+      setCategorias(categoriasUnicas)
 
       // Processar dados para gráfico de pizza (agrupado por categoria)
       const categorias = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.reduce((acc, item) => {
-        const categoria = item.categoria || 'Outros'
+        const categoria = item.categoria!
         const valor = item.valor || 0
         if (!acc[categoria]) {
           acc[categoria] = 0
@@ -114,18 +129,18 @@ export default function ReportPage() {
       const top10 = dadosPizzaOrdenados.slice(0, 10)
       
       // Se houver mais de 10, agrupar o resto em "Outros"
-      if (dadosPizzaOrdenados.length > 10) {
-        const somaOutros = dadosPizzaOrdenados
-          .slice(10)
-          .reduce((acc, item) => acc + item.valor, 0)
+      // if (dadosPizzaOrdenados.length > 10) {
+      //   const somaOutros = dadosPizzaOrdenados
+      //     .slice(10)
+      //     .reduce((acc, item) => acc + item.valor, 0)
         
-        if (somaOutros > 0) {
-          top10.push({
-            categoria: 'Outros',
-            valor: somaOutros
-          })
-        }
-      }
+      //   if (somaOutros > 0) {
+      //     top10.push({
+      //       categoria: `+ ${dadosPizzaOrdenados.length - 10} Categorias`,
+      //       valor: somaOutros
+      //     })
+      //   }
+      // }
       
       setPieData(top10)
 
@@ -159,8 +174,17 @@ export default function ReportPage() {
     fetchData()
   }, [cartao, ano, mes, supabase])
 
-  // Calcular o total
-  const totalDespesas = tableData.reduce((acc, item) => {
+  // Efeito para filtrar dados quando a categoria mudar
+  useEffect(() => {
+    if (categoriaFiltro === "todas") {
+      setFilteredTableData(tableData)
+    } else {
+      setFilteredTableData(tableData.filter(item => item.categoria === categoriaFiltro))
+    }
+  }, [categoriaFiltro, tableData])
+
+  // Calcular o total baseado nos dados filtrados
+  const totalDespesas = filteredTableData.reduce((acc, item) => {
     return acc + item.valorNumerico
   }, 0)
 
@@ -244,8 +268,8 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="h-screen bg-black text-white p-4 sm:p-6 lg:py-8 lg:px-[5vw] overflow-hidden flex flex-col">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 shrink-0">
+    <div className="min-h-screen bg-black text-white p-4 sm:p-6 lg:py-8 lg:px-[5vw]">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold flex items-center gap-2">
           <Image 
             src={cartao === "latam" ? latamLogo : AzulLogo} 
@@ -259,7 +283,7 @@ export default function ReportPage() {
       </header>
 
       {/* Gráficos em linha */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
         {/* Gráfico de Linha */}
         <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
@@ -377,27 +401,56 @@ export default function ReportPage() {
       </div>
 
       {/* Tabela */}
-      <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden flex-1 flex flex-col min-h-0">
-        <CardHeader className="p-4 sm:p-6 shrink-0">
-          <CardTitle className="text-white text-lg sm:text-xl">
-            Detalhamento de Despesas
-          </CardTitle>
-          <CardDescription className="text-zinc-400 text-sm">
-            Lista completa de transações
-          </CardDescription>
+      <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden">
+        <CardHeader className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="text-white text-lg sm:text-xl">
+                Detalhamento de Despesas
+              </CardTitle>
+              <CardDescription className="text-zinc-400 text-sm">
+                Lista completa de transações
+              </CardDescription>
+            </div>
+            <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
+              <SelectTrigger className="w-[200px] bg-zinc-800 border-zinc-700 text-white">
+                <SelectValue placeholder="Filtrar categoria" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-800 border-zinc-700">
+                <SelectItem value="todas" className="text-white hover:bg-zinc-700">
+                  Todas as categorias
+                </SelectItem>
+                {categorias.map((cat) => (
+                  <SelectItem 
+                    key={cat} 
+                    value={cat}
+                    className="text-white hover:bg-zinc-700"
+                  >
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
-        <CardContent className="p-0 sm:px-6 flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-auto min-h-0" style={{ maxHeight: 'calc(100% - 60px)' }}>
+        <CardContent className="p-0 sm:px-6 flex flex-col">
+          <div 
+            className="overflow-y-auto" 
+            style={{ 
+              minHeight: '240px',
+              maxHeight: '60vh'
+            }}
+          >
             <CompactTable 
               columns={COLUMNS} 
-              data={{ nodes: tableData }} 
+              data={{ nodes: filteredTableData }} 
               theme={theme}
               layout={{ custom: true, horizontalScroll: true, fixedHeader: true }}
             />
           </div>
           
           {/* Linha de Total - Fixo no footer */}
-          <div className="border-t-2 border-zinc-700 bg-zinc-800/70 p-4 font-bold shrink-0">
+          <div className="border-t-2 border-zinc-700 bg-zinc-800/70 p-4 font-bold">
             <div className="grid grid-cols-[40%_30%_30%]">
               <div className="col-span-2 text-white">Total</div>
               <div className="text-white text-right">{totalFormatado}</div>
