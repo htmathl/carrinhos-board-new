@@ -50,6 +50,7 @@ export default function ReportPage() {
   const [filteredTableData, setFilteredTableData] = useState<Array<{id: string, despesa: string, categoria: string, valor: string, valorNumerico: number}>>([])
   const [pieData, setPieData] = useState<Array<{categoria: string, valor: number}>>([])
   const [lineData, setLineData] = useState<Array<{mes: string, valor: number}>>([])
+  const [dadosAnoCompleto, setDadosAnoCompleto] = useState<(DadosLatam | DadosAzul)[]>([])
   const [loading, setLoading] = useState(true)
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("todas")
   const [categorias, setCategorias] = useState<string[]>([])
@@ -84,6 +85,9 @@ export default function ReportPage() {
       if (errorAno) {
         console.error('Erro ao buscar dados do ano:', errorAno)
       }
+
+      // Armazenar dados do ano completo
+      setDadosAnoCompleto((dadosAno as (DadosLatam | DadosAzul)[]) || [])
 
       // Processar dados da tabela e ordenar por valor decrescente
       const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map((item, index) => ({
@@ -128,51 +132,45 @@ export default function ReportPage() {
       // Pegar as 10 maiores categorias
       const top10 = dadosPizzaOrdenados.slice(0, 10)
       
-      // Se houver mais de 10, agrupar o resto em "Outros"
-      // if (dadosPizzaOrdenados.length > 10) {
-      //   const somaOutros = dadosPizzaOrdenados
-      //     .slice(10)
-      //     .reduce((acc, item) => acc + item.valor, 0)
-        
-      //   if (somaOutros > 0) {
-      //     top10.push({
-      //       categoria: `+ ${dadosPizzaOrdenados.length - 10} Categorias`,
-      //       valor: somaOutros
-      //     })
-      //   }
-      // }
-      
       setPieData(top10)
-
-      // Processar dados para gráfico de linha (agrupado por mês)
-      const mesesMap: Record<number, string> = {
-        1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
-        7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'
-      }
-
-      const meses = (dadosAno as (DadosLatam | DadosAzul)[])?.reduce((acc, item) => {
-        const mesNum = item.mes || 1
-        const valor = item.valor || 0
-        if (!acc[mesNum]) {
-          acc[mesNum] = 0
-        }
-        acc[mesNum] += valor
-        return acc
-      }, {} as Record<number, number>)
-
-      const dadosLinha = Object.entries(meses || {})
-        .sort(([a], [b]) => parseInt(a) - parseInt(b))
-        .map(([mesNum, valor]) => ({
-          mes: mesesMap[parseInt(mesNum)],
-          valor
-        }))
-      setLineData(dadosLinha)
 
       setLoading(false)
     }
 
     fetchData()
   }, [cartao, ano, mes, supabase])
+
+  // Efeito para processar dados do gráfico de linha quando categoria filtro mudar
+  useEffect(() => {
+    const mesesMap: Record<number, string> = {
+      1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
+      7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'
+    }
+
+    // Filtrar dados por categoria se não for "todas"
+    const dadosFiltrados = categoriaFiltro === "todas" 
+      ? dadosAnoCompleto 
+      : dadosAnoCompleto.filter(item => item.categoria === categoriaFiltro)
+
+    const meses = dadosFiltrados.reduce((acc, item) => {
+      const mesNum = item.mes || 1
+      const valor = item.valor || 0
+      if (!acc[mesNum]) {
+        acc[mesNum] = 0
+      }
+      acc[mesNum] += valor
+      return acc
+    }, {} as Record<number, number>)
+
+    const dadosLinha = Object.entries(meses)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([mesNum, valor]) => ({
+        mes: mesesMap[parseInt(mesNum)],
+        valor
+      }))
+    
+    setLineData(dadosLinha)
+  }, [categoriaFiltro, dadosAnoCompleto])
 
   // Efeito para filtrar dados quando a categoria mudar
   useEffect(() => {
