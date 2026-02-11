@@ -46,14 +46,16 @@ export default function ReportPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [tableData, setTableData] = useState<Array<{id: string, despesa: string, categoria: string, valor: string, valorNumerico: number}>>([])
-  const [filteredTableData, setFilteredTableData] = useState<Array<{id: string, despesa: string, categoria: string, valor: string, valorNumerico: number}>>([])
-  const [pieData, setPieData] = useState<Array<{categoria: string, valor: number}>>([])
-  const [lineData, setLineData] = useState<Array<{mes: string, valor: number}>>([])
+  const [tableData, setTableData] = useState<Array<{ id: string, despesa: string, categoria: string, valor: string, valorNumerico: number }>>([])
+  const [filteredTableData, setFilteredTableData] = useState<Array<{ id: string, despesa: string, categoria: string, valor: string, valorNumerico: number }>>([])
+  const [pieData, setPieData] = useState<Array<{ categoria: string, valor: number }>>([])
+  const [lineData, setLineData] = useState<Array<{ mes: string, valor: number }>>([])
   const [dadosAnoCompleto, setDadosAnoCompleto] = useState<(DadosLatam | DadosAzul)[]>([])
+  const [dadosContinuos, setDadosContinuos] = useState<(DadosLatam | DadosAzul)[]>([])
   const [loading, setLoading] = useState(true)
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("todas")
   const [categorias, setCategorias] = useState<string[]>([])
+  const [modoGrafico, setModoGrafico] = useState<'anual' | 'continuo'>('anual')
 
   const lineColor = cartao === "azul" ? "#026CB6" : "#E8114B"
 
@@ -89,6 +91,37 @@ export default function ReportPage() {
       // Armazenar dados do ano completo
       setDadosAnoCompleto((dadosAno as (DadosLatam | DadosAzul)[]) || [])
 
+      // Buscar dados dos últimos 5 meses para modo contínuo
+      const mesAtual = mapMesNumero(mes)
+      const anoAtual = parseInt(ano)
+
+      // Calcular os últimos 5 meses
+      const mesesAnteriores: Array<{ ano: number, mes: number }> = []
+      for (let i = 0; i < 5; i++) {
+        let mesCalc = mesAtual - i
+        let anoCalc = anoAtual
+
+        // Se o mês for negativo, voltar para o ano anterior
+        while (mesCalc <= 0) {
+          mesCalc += 12
+          anoCalc -= 1
+        }
+
+        mesesAnteriores.push({ ano: anoCalc, mes: mesCalc })
+      }
+
+      // Buscar dados de todos os meses necessários
+      const { data: dadosCont, error: errorCont } = await supabase
+        .from(tabela)
+        .select('*')
+        .or(mesesAnteriores.map(m => `and(ano.eq.${m.ano},mes.eq.${m.mes})`).join(','))
+
+      if (errorCont) {
+        console.error('Erro ao buscar dados contínuos:', errorCont)
+      }
+
+      setDadosContinuos((dadosCont as (DadosLatam | DadosAzul)[]) || [])
+
       // Processar dados da tabela e ordenar por valor decrescente
       const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map((item, index) => ({
         id: `${index}`,
@@ -100,7 +133,7 @@ export default function ReportPage() {
           currency: 'BRL'
         }).format(item.valor || 0)
       })) || []
-      
+
       // Ordenar por valor decrescente
       dadosTabela.sort((a, b) => b.valorNumerico - a.valorNumerico)
       setTableData(dadosTabela)
@@ -128,10 +161,10 @@ export default function ReportPage() {
           valor
         }))
         .sort((a, b) => b.valor - a.valor)
-      
+
       // Pegar as 10 maiores categorias
       const top10 = dadosPizzaOrdenados.slice(0, 10)
-      
+
       setPieData(top10)
 
       setLoading(false)
@@ -140,37 +173,53 @@ export default function ReportPage() {
     fetchData()
   }, [cartao, ano, mes, supabase])
 
-  // Efeito para processar dados do gráfico de linha quando categoria filtro mudar
+  // Efeito para processar dados do gráfico de linha quando categoria filtro ou modo mudar
   useEffect(() => {
     const mesesMap: Record<number, string> = {
       1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
       7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'
     }
 
+    // Selecionar fonte de dados baseado no modo
+    const dadosFonte = modoGrafico === 'anual' ? dadosAnoCompleto : dadosContinuos
+
     // Filtrar dados por categoria se não for "todas"
-    const dadosFiltrados = categoriaFiltro === "todas" 
-      ? dadosAnoCompleto 
-      : dadosAnoCompleto.filter(item => item.categoria === categoriaFiltro)
+    const dadosFiltrados = categoriaFiltro === "todas"
+      ? dadosFonte
+      : dadosFonte.filter(item => item.categoria === categoriaFiltro)
 
     const meses = dadosFiltrados.reduce((acc, item) => {
       const mesNum = item.mes || 1
+      const anoNum = item.ano || parseInt(ano)
+      const chave = `${anoNum}-${mesNum}` // Usar ano e mês como chave para evitar sobreposição
       const valor = item.valor || 0
-      if (!acc[mesNum]) {
-        acc[mesNum] = 0
+      if (!acc[chave]) {
+        acc[chave] = { mes: mesNum, ano: anoNum, valor: 0 }
       }
-      acc[mesNum] += valor
+      acc[chave].valor += valor
       return acc
-    }, {} as Record<number, number>)
+    }, {} as Record<string, { mes: number, ano: number, valor: number }>)
 
-    const dadosLinha = Object.entries(meses)
-      .sort(([a], [b]) => parseInt(a) - parseInt(b))
-      .map(([mesNum, valor]) => ({
-        mes: mesesMap[parseInt(mesNum)],
-        valor
-      }))
-    
+    const dadosLinha = Object.values(meses)
+      .sort((a, b) => {
+        // Ordenar por ano e depois por mês
+        if (a.ano !== b.ano) return a.ano - b.ano
+        return a.mes - b.mes
+      })
+      .map(({ mes: mesNum, ano: anoNum, valor }) => {
+        // Se for modo contínuo e tiver meses de anos diferentes, mostrar mês/ano
+        const label = modoGrafico === 'continuo' && Object.values(meses).some(m => m.ano !== anoNum)
+          ? `${mesesMap[mesNum]}/${anoNum.toString().slice(-2)}`
+          : mesesMap[mesNum]
+
+        return {
+          mes: label,
+          valor
+        }
+      })
+
     setLineData(dadosLinha)
-  }, [categoriaFiltro, dadosAnoCompleto])
+  }, [categoriaFiltro, dadosAnoCompleto, dadosContinuos, modoGrafico, ano])
 
   // Efeito para filtrar dados quando a categoria mudar
   useEffect(() => {
@@ -240,20 +289,20 @@ export default function ReportPage() {
 
   // Definir colunas
   const COLUMNS = [
-    { 
-      label: 'Despesa', 
+    {
+      label: 'Despesa',
       renderCell: (item: typeof tableData[0]) => item.despesa,
       pinLeft: true
     },
-    { 
-      label: 'Categoria', 
+    {
+      label: 'Categoria',
       renderCell: (item: typeof tableData[0]) => (
         <span style={{ color: '#a1a1aa' }}>{item.categoria}</span>
       )
     },
-    { 
-      label: 'Valor', 
-      renderCell: (item: typeof tableData[0]) => item.valor 
+    {
+      label: 'Valor',
+      renderCell: (item: typeof tableData[0]) => item.valor
     },
   ]
 
@@ -269,10 +318,10 @@ export default function ReportPage() {
     <div className="min-h-screen bg-black text-white p-4 sm:p-6 lg:py-8 lg:px-[5vw]">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold flex items-center gap-2">
-          <Image 
-            src={cartao === "latam" ? latamLogo : AzulLogo} 
+          <Image
+            src={cartao === "latam" ? latamLogo : AzulLogo}
             alt={cartao === "latam" ? "LATAM" : "Azul"}
-            style={{transform: `scale(${cartao === "latam" ? 1 : 0.7})`}}
+            style={{ transform: `scale(${cartao === "latam" ? 1 : 0.7})` }}
             className="object-contain"
           />
           {mes} de {ano}
@@ -285,12 +334,32 @@ export default function ReportPage() {
         {/* Gráfico de Linha */}
         <Card className="bg-zinc-900 border-zinc-800 w-full overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-white text-lg sm:text-xl">
-              Despesas por Mês
-            </CardTitle>
-            <CardDescription className="text-zinc-400 text-sm">
-              Evolução mensal dos gastos
-            </CardDescription>
+            <div className="flex flex-row justify-between items-center">
+                <div className="flex flex-col gap-3">
+                  <CardTitle className="text-white text-lg sm:text-xl">
+                    Despesas por Mês
+                  </CardTitle>
+                  <CardDescription className="text-zinc-400 text-sm">
+                    Evolução mensal dos gastos
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={modoGrafico === 'anual' ? 'outline' : 'default'}
+                    onClick={() => setModoGrafico('anual')}
+                    size="sm"
+                  >
+                    Anual
+                  </Button>
+                  <Button
+                    variant={modoGrafico === 'continuo' ? 'outline' : 'default'}
+                    onClick={() => setModoGrafico('continuo')}
+                    size="sm"
+                  >
+                    Contínuo
+                  </Button>
+                </div>
+            </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
             <div className="w-full overflow-hidden">
@@ -380,15 +449,15 @@ export default function ReportPage() {
                         />
                       ))}
                     </Pie>
-                    <ChartTooltip 
-                      content={<ChartTooltipContent 
+                    <ChartTooltip
+                      content={<ChartTooltipContent
                         formatter={(value) => {
                           return new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL'
                           }).format(value as number)
                         }}
-                      />} 
+                      />}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -419,8 +488,8 @@ export default function ReportPage() {
                   Todas as categorias
                 </SelectItem>
                 {categorias.map((cat) => (
-                  <SelectItem 
-                    key={cat} 
+                  <SelectItem
+                    key={cat}
                     value={cat}
                     className="text-white hover:bg-zinc-700"
                   >
@@ -432,21 +501,21 @@ export default function ReportPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0 sm:px-6 flex flex-col">
-          <div 
-            className="overflow-y-auto" 
-            style={{ 
+          <div
+            className="overflow-y-auto"
+            style={{
               minHeight: '240px',
               maxHeight: '60vh'
             }}
           >
-            <CompactTable 
-              columns={COLUMNS} 
-              data={{ nodes: filteredTableData }} 
+            <CompactTable
+              columns={COLUMNS}
+              data={{ nodes: filteredTableData }}
               theme={theme}
               layout={{ custom: true, horizontalScroll: true, fixedHeader: true }}
             />
           </div>
-          
+
           {/* Linha de Total - Fixo no footer */}
           <div className="border-t-2 border-zinc-700 bg-zinc-800/70 p-4 font-bold">
             <div className="grid grid-cols-[40%_30%_30%]">

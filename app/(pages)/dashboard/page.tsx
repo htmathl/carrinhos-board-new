@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import latamLogo from '../../assets/latam_logo.svg'
-import AzulLogo from '../../assets/azul_logo.svg'
+import InterLogo from '../../assets/inter_logo.svg'
 import Image from 'next/image'
 import GhostLoader from '@/components/loader/GhostLoader'
 import { Loader2 } from 'lucide-react'
@@ -30,7 +30,7 @@ export default function DashboardPage() {
     const [anoSelecionado, setAnoSelecionado] = useState<number>(anoAtual)
 
     const [latamMeses, setLatamMeses] = useState<string[]>([])
-    const [azulMeses, setAzulMeses] = useState<string[]>([])
+    const [interMeses, setInterMeses] = useState<string[]>([])
 
     const handleLogout = async () => {
         await supabase.auth.signOut()
@@ -105,17 +105,17 @@ export default function DashboardPage() {
                 setLatamMeses(mesesNomes)
             }
 
-            const { data: azulData, error: azulError } = await supabase
+            const { data: interData, error: interError } = await supabase
                 .from('dados_azul')
                 .select('mes')
                 .eq('ano', anoSelecionado)
 
-            if (azulError) {
-                console.error('Erro ao buscar dados AZUL:', azulError)
+            if (interError) {
+                console.error('Erro ao buscar dados INTER:', interError)
             } else {
-                const mesesUnicos = Array.from(new Set(azulData?.map(item => item.mes))).sort((a, b) => (a as number) - (b as number))
+                const mesesUnicos = Array.from(new Set(interData?.map(item => item.mes))).sort((a, b) => (a as number) - (b as number))
                 const mesesNomes = mesesUnicos.map(mes => mapMeses(mes as number)).filter(Boolean) as string[]
-                setAzulMeses(mesesNomes)
+                setInterMeses(mesesNomes)
             }
 
             // Garantir que o loader apareça por pelo menos 2 segundos apenas no carregamento inicial
@@ -164,8 +164,8 @@ export default function DashboardPage() {
                 </div>
             ) : (
                 <div className="text-center w-full">
-                    <div className="flex flex-wrap gap-6 h-72 w-full justify-center mb-8">
-                        <Card className="w-[300px] p-6 bg-[#E8114B] text-white border-0">
+                    <div className="flex flex-wrap gap-6 h-100 w-full justify-center mb-8">
+                        <Card className="w-[300px] min-h-72 p-6 bg-[#E8114B] text-white border-0">
                             <div className="h-12 mb-6">
                                 <Image src={latamLogo} alt="LATAM" style={{ transform: "scale(1.5)", margin: "auto" }} />
                             </div>
@@ -186,23 +186,24 @@ export default function DashboardPage() {
                             </div>
                         </Card>
 
-                        <Card className="w-[300px] p-6 bg-[#026CB6] text-white border-0">
+                        {/* Old: #026CB6 */}
+                        <Card className="w-[300px] p-6 bg-[#ff7a00] text-white border-0">
                             <div className="h-12 mb-6">
-                                <Image src={AzulLogo} alt="AZUL" style={{ transform: "scale(1)", margin: "auto" }} />
+                                <Image src={InterLogo} alt="INTER" style={{ transform: "scale(1)", margin: "auto" }} />
                             </div>
                             <div className="flex flex-col gap-3 items-center">
-                                {azulMeses.length > 0 ? (
-                                    azulMeses.map((mes) => (
+                                {interMeses.length > 0 ? (
+                                    interMeses.map((mes) => (
                                         <Button
                                             key={mes}
                                             className="bg-transparent border-2 border-white text-white hover:bg-white/10 hover:border-white w-[160px]"
-                                            onClick={() => handleNavigateToReport('azul', mes)}
+                                            onClick={() => handleNavigateToReport('inter', mes)}
                                         >
-                                            {mes}
+                                            Em breve ;)
                                         </Button>
                                     ))
                                 ) : (
-                                    <div>Nenhum dado disponível</div>
+                                    <div>Em breve ;)</div>
                                 )}
                             </div>
                         </Card>
