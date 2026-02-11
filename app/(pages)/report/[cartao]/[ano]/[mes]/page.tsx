@@ -37,6 +37,17 @@ const mapMesNumero = (mesNome: string): number => {
   return meses[mesNome] || 1
 }
 
+const mapNumeroMes: Record<number, string> = {
+  1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+  5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+  9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+}
+
+const mesesAbreviados: Record<number, string> = {
+  1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
+  7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'
+}
+
 export default function ReportPage() {
   const params = useParams()
   const cartao = params?.cartao as string
@@ -56,6 +67,7 @@ export default function ReportPage() {
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("todas")
   const [categorias, setCategorias] = useState<string[]>([])
   const [modoGrafico, setModoGrafico] = useState<'anual' | 'continuo'>('anual')
+  const [mesesDisponiveis, setMesesDisponiveis] = useState<Array<{ ano: number, mes: number, label: string, mesNome: string }>>([])
 
   const lineColor = cartao === "azul" ? "#026CB6" : "#E8114B"
 
@@ -121,6 +133,27 @@ export default function ReportPage() {
       }
 
       setDadosContinuos((dadosCont as (DadosLatam | DadosAzul)[]) || [])
+
+      // Buscar todos os meses disponíveis para navegação rápida
+      const { data: mesesData } = await supabase
+        .from(tabela)
+        .select('ano, mes')
+
+      if (mesesData) {
+        const chaves = new Set(mesesData.map(item => `${item.ano}-${item.mes}`))
+        const mesesUnicos = Array.from(chaves)
+          .map(key => {
+            const [a, m] = key.split('-').map(Number)
+            return { ano: a, mes: m }
+          })
+          .sort((a, b) => a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)
+
+        setMesesDisponiveis(mesesUnicos.map(m => ({
+          ...m,
+          label: `${mesesAbreviados[m.mes]}/${m.ano.toString().slice(-2)}`,
+          mesNome: mapNumeroMes[m.mes]
+        })))
+      }
 
       // Processar dados da tabela e ordenar por valor decrescente
       const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map((item, index) => ({
@@ -326,7 +359,32 @@ export default function ReportPage() {
           />
           {mes} de {ano}
         </h1>
-        <Button onClick={() => router.push("/dashboard")}>Voltar</Button>
+        <div className="flex items-center gap-2 mt-2 sm:mt-0">
+          <Select
+            value={`${ano}-${mapMesNumero(mes)}`}
+            onValueChange={(value) => {
+              const [novoAno, novoMesNum] = value.split('-')
+              const novoMesNome = mapNumeroMes[parseInt(novoMesNum)]
+              router.push(`/report/${cartao}/${novoAno}/${novoMesNome}`)
+            }}
+          >
+            <SelectTrigger className="w-[120px] bg-zinc-800 border-zinc-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-800 border-zinc-700">
+              {mesesDisponiveis.map((m) => (
+                <SelectItem
+                  key={`${m.ano}-${m.mes}`}
+                  value={`${m.ano}-${m.mes}`}
+                  className="text-white hover:bg-zinc-700"
+                >
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => router.push("/dashboard")}>Voltar</Button>
+        </div>
       </header>
 
       {/* Gráficos em linha */}
