@@ -91,7 +91,16 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      meses_unicos: {
+        Row: {
+          ano: number | null
+          mes: number | null
+        }
+        // É vital incluir estes como 'never' se a View for apenas leitura
+        Insert: { [_ in never]: never }
+        Update: { [_ in never]: never }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never

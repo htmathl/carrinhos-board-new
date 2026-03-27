@@ -52,7 +52,7 @@ export default function ReportPage() {
   const params = useParams()
   const cartao = params?.cartao as string
   const ano = params?.ano as string
-  const mes = params?.mes as string
+  const mes = decodeURIComponent(params?.mes as string)
 
   const router = useRouter()
   const supabase = createClient()
@@ -136,8 +136,9 @@ export default function ReportPage() {
 
       // Buscar todos os meses disponíveis para navegação rápida
       const { data: mesesData } = await supabase
-        .from(tabela)
-        .select('ano, mes')
+        // .from(tabela)
+        .from('meses_unicos')
+        .select('*')
 
       if (mesesData) {
         const chaves = new Set(mesesData.map(item => `${item.ano}-${item.mes}`))

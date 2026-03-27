@@ -165,7 +165,8 @@ export default function DashboardPage() {
             ) : (
                 <div className="text-center w-full">
                     <div className="flex flex-wrap gap-6 h-100 w-full justify-center mb-8">
-                        <Card className="w-[300px] min-h-72 p-6 bg-[#E8114B] text-white border-0">
+                        {/* Old: #E8114B */}
+                        <Card className="w-[300px] min-h-72 p-6 bg-[#10192b] text-white border-0">
                             <div className="h-12 mb-6">
                                 <Image src={latamLogo} alt="LATAM" style={{ transform: "scale(1.5)", margin: "auto" }} />
                             </div>
@@ -187,7 +188,8 @@ export default function DashboardPage() {
                         </Card>
 
                         {/* Old: #026CB6 */}
-                        <Card className="w-[300px] p-6 bg-[#ff7a00] text-white border-0">
+                        {/* Old 2: #ff7a00 */}
+                        <Card className="w-[300px] p-6 bg-[#14140e] text-white border">
                             <div className="h-12 mb-6">
                                 <Image src={InterLogo} alt="INTER" style={{ transform: "scale(1)", margin: "auto" }} />
                             </div>
