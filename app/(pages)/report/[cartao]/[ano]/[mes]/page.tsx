@@ -509,11 +509,12 @@ export default function ReportPage() {
                     </Pie>
                     <ChartTooltip
                       content={<ChartTooltipContent
-                        formatter={(_value, _name, _item, _index, payload) => {
+                        formatter={(_value, _name, _item) => {
+                          const original = (_item?.payload as { valorOriginal: number })?.valorOriginal ?? 0
                           return new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL'
-                          }).format(payload.valorOriginal as number)
+                          }).format(original)
                         }}
                       />}
                     />
