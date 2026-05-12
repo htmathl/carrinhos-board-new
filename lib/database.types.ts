@@ -14,7 +14,7 @@ export type Database = {
   }
   public: {
     Tables: {
-      dados_azul: {
+      dados_inter: {
         Row: {
           ano: number | null
           categoria: string | null
@@ -95,6 +95,7 @@ export type Database = {
         Row: {
           ano: number | null
           mes: number | null
+          origem: string | null
         }
         // É vital incluir estes como 'never' se a View for apenas leitura
         Insert: { [_ in never]: never }

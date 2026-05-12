@@ -106,7 +106,7 @@ export default function DashboardPage() {
             }
 
             const { data: interData, error: interError } = await supabase
-                .from('dados_azul')
+                .from('dados_inter')
                 .select('mes')
                 .eq('ano', anoSelecionado)
 
@@ -201,11 +201,11 @@ export default function DashboardPage() {
                                             className="bg-transparent border-2 border-white text-white hover:bg-white/10 hover:border-white w-[160px]"
                                             onClick={() => handleNavigateToReport('inter', mes)}
                                         >
-                                            Em breve ;)
+                                            {mes}
                                         </Button>
                                     ))
                                 ) : (
-                                    <div>Em breve ;)</div>
+                                    <div>Nenhum dado disponível</div>
                                 )}
                             </div>
                         </Card>

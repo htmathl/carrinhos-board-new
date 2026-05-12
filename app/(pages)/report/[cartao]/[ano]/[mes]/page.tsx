@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid } from "recharts"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react"
@@ -20,11 +20,11 @@ import {
 } from "@/components/ui/select"
 
 import latamLogo from '@/app/assets/latam_logo.svg'
-import AzulLogo from '@/app/assets/azul_logo.svg'
+import InterLogo from '@/app/assets/inter_logo.svg'
 import Image from 'next/image'
 
 type DadosLatam = Database['public']['Tables']['dados_latam']['Row']
-type DadosAzul = Database['public']['Tables']['dados_azul']['Row']
+type DadosInter = Database['public']['Tables']['dados_inter']['Row']
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#82ca9d", "#ffc658", "#ff7c7c", "#8dd1e1", "#a4de6c", "#d0ed57"]
 
@@ -59,22 +59,22 @@ export default function ReportPage() {
 
   const [tableData, setTableData] = useState<Array<{ id: string, despesa: string, categoria: string, valor: string, valorNumerico: number }>>([])
   const [filteredTableData, setFilteredTableData] = useState<Array<{ id: string, despesa: string, categoria: string, valor: string, valorNumerico: number }>>([])
-  const [pieData, setPieData] = useState<Array<{ categoria: string, valor: number }>>([])
+  const [pieData, setPieData] = useState<Array<{ categoria: string, valor: number, valorOriginal: number }>>([])
   const [lineData, setLineData] = useState<Array<{ mes: string, valor: number }>>([])
-  const [dadosAnoCompleto, setDadosAnoCompleto] = useState<(DadosLatam | DadosAzul)[]>([])
-  const [dadosContinuos, setDadosContinuos] = useState<(DadosLatam | DadosAzul)[]>([])
+  const [dadosAnoCompleto, setDadosAnoCompleto] = useState<(DadosLatam | DadosInter)[]>([])
+  const [dadosContinuos, setDadosContinuos] = useState<(DadosLatam | DadosInter)[]>([])
   const [loading, setLoading] = useState(true)
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>("todas")
   const [categorias, setCategorias] = useState<string[]>([])
   const [modoGrafico, setModoGrafico] = useState<'anual' | 'continuo'>('anual')
   const [mesesDisponiveis, setMesesDisponiveis] = useState<Array<{ ano: number, mes: number, label: string, mesNome: string }>>([])
 
-  const lineColor = cartao === "azul" ? "#026CB6" : "#E8114B"
+  const lineColor = cartao === "inter" ? "#ff7a00" : "#E8114B"
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
-      const tabela = cartao === "latam" ? "dados_latam" : "dados_azul"
+      const tabela = cartao === "latam" ? "dados_latam" : "dados_inter"
       const mesNumero = mapMesNumero(mes)
 
       // Buscar dados do mês atual
@@ -101,7 +101,7 @@ export default function ReportPage() {
       }
 
       // Armazenar dados do ano completo
-      setDadosAnoCompleto((dadosAno as (DadosLatam | DadosAzul)[]) || [])
+      setDadosAnoCompleto((dadosAno as (DadosLatam | DadosInter)[]) || [])
 
       // Buscar dados dos últimos 5 meses para modo contínuo
       const mesAtual = mapMesNumero(mes)
@@ -132,13 +132,13 @@ export default function ReportPage() {
         console.error('Erro ao buscar dados contínuos:', errorCont)
       }
 
-      setDadosContinuos((dadosCont as (DadosLatam | DadosAzul)[]) || [])
+      setDadosContinuos((dadosCont as (DadosLatam | DadosInter)[]) || [])
 
       // Buscar todos os meses disponíveis para navegação rápida
       const { data: mesesData } = await supabase
-        // .from(tabela)
         .from('meses_unicos')
         .select('*')
+        .eq('origem', cartao)
 
       if (mesesData) {
         const chaves = new Set(mesesData.map(item => `${item.ano}-${item.mes}`))
@@ -147,6 +147,7 @@ export default function ReportPage() {
             const [a, m] = key.split('-').map(Number)
             return { ano: a, mes: m }
           })
+          .filter(({ ano, mes }) => !isNaN(ano) && !isNaN(mes))
           .sort((a, b) => a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)
 
         setMesesDisponiveis(mesesUnicos.map(m => ({
@@ -157,7 +158,7 @@ export default function ReportPage() {
       }
 
       // Processar dados da tabela e ordenar por valor decrescente
-      const dadosTabela = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.map((item, index) => ({
+      const dadosTabela = (dadosMesAtual as (DadosLatam | DadosInter)[])?.map((item, index) => ({
         id: `${index}`,
         despesa: item.despesa,
         categoria: item.categoria!,
@@ -178,7 +179,7 @@ export default function ReportPage() {
       setCategorias(categoriasUnicas)
 
       // Processar dados para gráfico de pizza (agrupado por categoria)
-      const categorias = (dadosMesAtual as (DadosLatam | DadosAzul)[])?.reduce((acc, item) => {
+      const categorias = (dadosMesAtual as (DadosLatam | DadosInter)[])?.reduce((acc, item) => {
         const categoria = item.categoria!
         const valor = item.valor || 0
         if (!acc[categoria]) {
@@ -188,11 +189,12 @@ export default function ReportPage() {
         return acc
       }, {} as Record<string, number>)
 
-      // Ordenar por valor decrescente e pegar apenas as 10 maiores
+      // Ordenar por valor absoluto decrescente e pegar apenas as 10 maiores
       const dadosPizzaOrdenados = Object.entries(categorias || {})
-        .map(([categoria, valor]) => ({
+        .map(([categoria, valorOriginal]) => ({
           categoria,
-          valor
+          valor: Math.abs(valorOriginal),
+          valorOriginal
         }))
         .sort((a, b) => b.valor - a.valor)
 
@@ -353,8 +355,8 @@ export default function ReportPage() {
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold flex items-center gap-2">
           <Image
-            src={cartao === "latam" ? latamLogo : AzulLogo}
-            alt={cartao === "latam" ? "LATAM" : "Azul"}
+            src={cartao === "latam" ? latamLogo : InterLogo}
+            alt={cartao === "latam" ? "LATAM" : "Inter"}
             style={{ transform: `scale(${cartao === "latam" ? 1 : 0.7})` }}
             className="object-contain"
           />
@@ -431,7 +433,6 @@ export default function ReportPage() {
                 }}
                 className="h-[250px] sm:h-[300px] w-full"
               >
-                <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={lineData}
                     margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
@@ -456,7 +457,6 @@ export default function ReportPage() {
                       strokeWidth={2}
                     />
                   </LineChart>
-                </ResponsiveContainer>
               </ChartContainer>
             </div>
           </CardContent>
@@ -483,7 +483,6 @@ export default function ReportPage() {
                 }}
                 className="h-[250px] sm:h-[300px] w-full"
               >
-                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={pieData}
@@ -510,16 +509,15 @@ export default function ReportPage() {
                     </Pie>
                     <ChartTooltip
                       content={<ChartTooltipContent
-                        formatter={(value) => {
+                        formatter={(_value, _name, _item, _index, payload) => {
                           return new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL'
-                          }).format(value as number)
+                          }).format(payload.valorOriginal as number)
                         }}
                       />}
                     />
                   </PieChart>
-                </ResponsiveContainer>
               </ChartContainer>
             </div>
           </CardContent>
