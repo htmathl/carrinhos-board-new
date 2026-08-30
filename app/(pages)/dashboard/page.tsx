@@ -93,9 +93,10 @@ export default function DashboardPage() {
             }
 
             const { data: latamData, error: latamError } = await supabase
-                .from('dados_latam')
+                .from('meses_unicos')
                 .select('mes')
                 .eq('ano', anoSelecionado)
+                .eq('origem', 'latam')
 
             if (latamError) {
                 console.error('Erro ao buscar dados LATAM:', latamError)
